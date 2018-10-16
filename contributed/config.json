@@ -1,0 +1,7 @@
+{
+  "face_crop_size" : 160,
+  "face_crop_margin" : 32,
+  "face_s3_bucket" : "url goes here",
+  "thumbnail_sqs_name" : "thumbnail-videos",
+  "facenet_modelpath" : "/facenet/20180402-114759.pb"
+}

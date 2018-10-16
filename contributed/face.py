@@ -57,10 +57,10 @@ class Face:
 
 
 class Recognition:
-    def __init__(self):
-        self.detect = Detection()
-        self.encoder = Encoder()
-        self.identifier = Identifier()
+    def __init__(self,face_crop_size=160, face_crop_margin=32, facenet_model=None,class_model=None):
+        self.detect = Detection(face_crop_size, face_crop_margin)
+        self.encoder = Encoder(facenet_model=facenet_model)
+        self.identifier = Identifier(class_model=class_model)
 
     def add_identity(self, image, person_name):
         faces = self.detect.find_faces(image)
@@ -84,22 +84,27 @@ class Recognition:
 
 
 class Identifier:
-    def __init__(self):
-        with open(classifier_model, 'rb') as infile:
+    def __init__(self, class_model = None):
+        if class_model == None:
+            class_model = classifier_model
+        with open(class_model, 'rb') as infile:
             self.model, self.class_names = pickle.load(infile)
 
     def identify(self, face):
         if face.embedding is not None:
+            # TODO: Don lets check the probability of this result to see if we want to use this prediction
             predictions = self.model.predict_proba([face.embedding])
             best_class_indices = np.argmax(predictions, axis=1)
             return self.class_names[best_class_indices[0]]
 
 
 class Encoder:
-    def __init__(self):
+    def __init__(self, facenet_model=None):
         self.sess = tf.Session()
+        if facenet_model == None:
+            facenet_model = facenet_model_checkpoint
         with self.sess.as_default():
-            facenet.load_model(facenet_model_checkpoint)
+            facenet.load_model(facenet_model)
 
     def generate_embedding(self, face):
         # Get input and output tensors
