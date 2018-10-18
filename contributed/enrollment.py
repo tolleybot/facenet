@@ -106,7 +106,7 @@ def runSQSPoller():
                             'faces': updated_faces
                         }
                     )
-
+                else:
                     message.delete()
 
         time.sleep(cfg['input_queue_polling_delay'])
