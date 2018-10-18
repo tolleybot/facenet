@@ -35,9 +35,8 @@ def untag(personId):
                 resp_match = table.query(KeyConditionExpression=Key('personId', ).eq(m))
 
                 if resp_match['ResponseMetadata']['HTTPStatusCode'] != 200:
-                    print(
-                        "A response code of {} returned from query for match item".format(resp_match['HTTPStatusCode']))
-                    continue
+                    return {'error' :
+                        "A response code of {} returned from query for match item".format(resp_match['HTTPStatusCode'])}
 
                 mitem = resp_match['Items'][0]
 
@@ -54,8 +53,8 @@ def untag(personId):
                 )
 
                 if update_resp['ResponseMetadata']['HTTPStatusCode'] != 200:
-                    print("A response code of {} returned from updating tagged item in table".format(
-                        update_resp['HTTPStatusCode']))
+                    return {'error': "A response code of {} returned from updating tagged item in table".format(
+                        update_resp['HTTPStatusCode'])}
 
         # update known table to remove match list
         update_resp = table.update_item(
@@ -72,7 +71,10 @@ def untag(personId):
         )
 
         if update_resp['ResponseMetadata']['HTTPStatusCode'] != 200:
-            print("A response code of {} returned from updating tagged item in table".format(
-                update_resp['HTTPStatusCode']))
+            return {'error': "A response code of {} returned from updating tagged item in table".format(
+                update_resp['HTTPStatusCode'])}
 
-untag('a324412e-d2d9-11e8-9316-0242ac110004')
+    return {'status': True}
+
+
+#untag('a324412e-d2d9-11e8-9316-0242ac110004')

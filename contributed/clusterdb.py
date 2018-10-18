@@ -75,7 +75,8 @@ def runTagging(personId):
             )
 
             if update_resp['ResponseMetadata']['HTTPStatusCode'] != 200:
-                print("A response code of {} returned from updating table".format(update_resp['HTTPStatusCode']))
+                return {
+                    'error': "A response code of {} returned from updating table".format(update_resp['HTTPStatusCode'])}
 
             for p, t in zip(personIds, timestamps):
                 update_resp = table.update_item(
@@ -91,9 +92,11 @@ def runTagging(personId):
                 )
 
                 if update_resp['ResponseMetadata']['HTTPStatusCode'] != 200:
-                    print("A response code of {} returned from updating tagged item in table".format(
-                        update_resp['HTTPStatusCode']))
+                    return {'error': "A response code of {} returned from updating tagged item in table".format(
+                        update_resp['HTTPStatusCode'])}
             print('finished')
+
+    return {'status': True}
 
 
 if __name__ == "__main__":

@@ -5,6 +5,8 @@ from waitress import serve
 from flask import request
 import json
 from getmeta import getmeta
+from clusterdb import runTagging
+from untagitems import untag
 
 sys.path.append('.')
 
@@ -26,11 +28,23 @@ def match():
     """ match faces for a specific entry.  pass in personId
     """
 
+    personid = request.args.get('personid')
+
+    if personid:
+        return jsonify(runTagging(personid))
+
+    return jsonify({'error': 'personid param not found in request'})
 
 @app.route("/unmatch", methods=['GET'])
-def enroll():
+def unmatch():
     """ remove tagged items aka unmatch for a specific personId
     """
+    personid = request.args.get('personid')
+
+    if personid:
+        return jsonify(untag(personid))
+
+    return jsonify({'error': 'personid param not found in request'})
 
 
 @app.route("/requestmeta", methods=['GET'])
@@ -44,7 +58,7 @@ def requestmeta():
         j = getmeta(personid)
         return jsonify(j)
 
-    return jsonify({'error': 'personid param not fouund in request'})
+    return jsonify({'error': 'personid param not found in request'})
 
 
 print("Starting Face Recognition Server")
