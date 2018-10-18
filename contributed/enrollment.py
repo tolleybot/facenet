@@ -110,3 +110,7 @@ def runSQSPoller():
                     message.delete()
 
         time.sleep(cfg['input_queue_polling_delay'])
+
+
+if __name__ == "__main__":
+    runSQSPoller()
