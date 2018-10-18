@@ -89,7 +89,7 @@ def runSQSPoller():
                             updated_faces += [{'bbox': fc.bounding_box.tolist(), 'embedding': emb.tostring()}]
 
                     if len(updated_faces) == 0:
-                        print("Only small faces found < 32x32.  Faces will not be added")
+                        print("Only small faces found < {}.  Faces will not be added".format(cfg['face_min_area']))
                         message.delete()
                         continue
 
@@ -98,9 +98,10 @@ def runSQSPoller():
 
                     rec_table.put_item(
                         Item={
-                            'known': False,
+                            'known': False, # Indicates this entry was clustered with a tagged entry
+                            'tagged': False, # Indicates this entry was picked by the user
                             'personId': str(uuid.uuid1()),
-                            'timestamp': int(time.time()),
+                            'ts': int(time.time()),
                             'videos': [{'image': obj_url, 'imageId': str(uuid.uuid1())}],
                             'faces': updated_faces
                         }
@@ -109,6 +110,3 @@ def runSQSPoller():
                     message.delete()
 
         time.sleep(cfg['input_queue_polling_delay'])
-
-
-runSQSPoller()

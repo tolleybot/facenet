@@ -1,6 +1,7 @@
 import sys
 import numpy as np
 import json
+import os
 import time
 import boto3
 from boto3.dynamodb.conditions import Key, Attr
@@ -31,6 +32,7 @@ def runTagging(personId):
     if resp['Count'] > 0:
         item = resp['Items'][0]
         faces = item['faces']
+        timestamp = int(item['ts'])
 
         # convert embeddings back to numpy arrays
         for f in faces:
@@ -38,9 +40,10 @@ def runTagging(personId):
 
         # iterate over entire database for a specific time period
 
-        scan = table.scan(ProjectionExpression='personId, faces')
+        scan = table.scan(ProjectionExpression='personId, faces, ts')
 
         personIds = []
+        timestamps = []
         if scan['Count'] > 0:
             for i in scan['Items']:
 
@@ -54,23 +57,44 @@ def runTagging(personId):
                             d = distance(emb, f3['embedding'])
                             if d <= thresh:
                                 personIds.append(i['personId'])
+                                timestamps.append(i['ts'])
                                 break
 
         if len(personIds) > 0:
             update_resp = table.update_item(
                 Key={
-                    'personId': item['personId'],
-                    'timestamp': item['timestamp']
+                    'personId': personId,
+                    'ts': timestamp
                 },
-                UpdateExpression="set known= :t, matches= :c",
+                UpdateExpression="set known= :t, matches= :c, tagged= :g",
                 ExpressionAttributeValues={
                     ':t': True,
-                    ':c': personIds
+                    ':c': personIds,
+                    ':g': False
                 }
             )
 
             if update_resp['ResponseMetadata']['HTTPStatusCode'] != 200:
                 print("A response code of {} returned from updating table".format(update_resp['HTTPStatusCode']))
 
+            for p, t in zip(personIds, timestamps):
+                update_resp = table.update_item(
+                    Key={
+                        'personId': p,
+                        'ts': t
+                    },
+                    UpdateExpression="set known= :t, tagged= :c",
+                    ExpressionAttributeValues={
+                        ':t': False,
+                        ':c': True
+                    }
+                )
 
-runTagging('58d0cc94-d23b-11e8-8594-0242ac110004')
+                if update_resp['ResponseMetadata']['HTTPStatusCode'] != 200:
+                    print("A response code of {} returned from updating tagged item in table".format(
+                        update_resp['HTTPStatusCode']))
+            print('finished')
+
+
+if __name__ == "__main__":
+    runTagging(os.environ['PERSONID'])
