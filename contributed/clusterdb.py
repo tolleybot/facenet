@@ -97,6 +97,6 @@ def runTagging(personId):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 2:
-        personId = sys.argv[2]
+    if len(sys.argv) > 1:
+        personId = sys.argv[1]
         runTagging(personId)
