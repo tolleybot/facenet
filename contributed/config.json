@@ -6,5 +6,6 @@
   "facenet_modelpath" : "/facenet/20180402-114759.pb",
   "person_recognition_table" : "labweek_face_rec",
   "input_queue_polling_delay" : 1,
-  "cluster_face_distance" : 1
+  "cluster_face_distance" : 1,
+  "port" : 8080
 }

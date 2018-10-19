@@ -1,6 +1,7 @@
 import sys
 import flask
 from flask import Flask, jsonify
+from flask_cors import CORS, cross_origin
 from waitress import serve
 from flask import request
 import json
@@ -14,6 +15,8 @@ with open('./config.json') as f:
     cfg = json.load(f)
 
 app = Flask(__name__)
+cors = CORS(app)
+app.config['CORS_HEADERS'] = 'Content-Type'
 
 
 @app.route("/ping", methods=['GET'])
@@ -48,18 +51,21 @@ def unmatch():
 
 
 @app.route("/requestmeta", methods=['GET'])
+@cross_origin()
 def requestmeta():
     """
     :return: json data for the item with the personId passed
     """
     personid = request.args.get('personid')
+    limit = request.args.get('limit')
+    lastKeyTS = request.args.get('lastKeyTS')
+    lastKeyId = request.args.get('lastKeyId')
 
-    if personid:
-        j = getmeta(personid)
-        return jsonify(j)
 
-    return jsonify({'error': 'personid param not found in request'})
+    j = getmeta(personid,limit, lastKeyId,lastKeyTS)
+    return jsonify(j)
+
 
 
 print("Starting Face Recognition Server")
-serve(app=app, port=8080)
+serve(app=app, port=cfg['port'])

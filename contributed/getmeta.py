@@ -9,7 +9,7 @@ with open('./config.json') as f:
     cfg = json.load(f)
 
 
-def getmeta(personId):
+def getmeta(personId,limit=1000,lastKeyId=None,lastKeyTS=None):
     """
     Gets all meta data associated with a personId
     :param personId:
@@ -18,51 +18,91 @@ def getmeta(personId):
     db = boto3.resource('dynamodb', region_name='us-east-1')
     table = db.Table(cfg['person_recognition_table'])
 
-    resp = table.query(KeyConditionExpression=Key('personId', ).eq(personId))
+    if limit is None:
+        limit = 500
 
-    if resp['Count'] > 0:
-        item = resp['Items'][0]
+    limit = int(limit)
 
-        faces = []
-        if 'faces' in item:
-            for f in item['faces']:
-                tlx = int(f['bbox'][0])
-                tly = int(f['bbox'][1])
-                blx = int(f['bbox'][2])
-                bly = int(f['bbox'][3])
-                faces.append([tlx, tly, blx, bly])
+    if personId:
 
-        matches = []
-        if 'matches' in item:
-            for m in item['matches']:
-                matches.append(str(m))
+        resp = table.query(KeyConditionExpression=Key('personId', ).eq(personId))
 
-        known = False
-        if 'known' in item:
-            known = bool(item['known'])
+        if resp['Count'] > 0:
+            item = resp['Items'][0]
 
-        tagged = False
-        if 'tagged' in item:
-            tagged = bool(item['tagged'])
+            faces = []
+            if 'faces' in item:
+                for f in item['faces']:
+                    tlx = int(f['bbox'][0])
+                    tly = int(f['bbox'][1])
+                    blx = int(f['bbox'][2])
+                    bly = int(f['bbox'][3])
+                    faces.append([tlx, tly, blx, bly])
 
-        ts = int(item['ts'])
+            matches = []
+            if 'matches' in item:
+                for m in item['matches']:
+                    matches.append(str(m))
 
-        videos = []
-        if 'videos' in item:
-            for v in item['videos']:
-                videos.append(str(v['image']))
+            known = False
+            if 'known' in item:
+                known = bool(item['known'])
 
-        return {'personId': personId,
-                'ts': ts,
-                'faces': faces,
-                'known': known,
-                'tagged': tagged,
-                'matches': matches,
-                'videos': videos
-                }
+            tagged = False
+            if 'tagged' in item:
+                tagged = bool(item['tagged'])
 
-    return {'info': 'personId {} not found'.format(personId)}
+            ts = int(item['ts'])
 
-#j = getmeta('a324412e-d2d9-11e8-9316-0242ac110004')
-#print(j)
+            videos = []
+            if 'videos' in item:
+                for v in item['videos']:
+                    videos.append(str(v['image']))
+
+            return {'personId': personId,
+                    'ts': ts,
+                    'faces': faces,
+                    'known': known,
+                    'tagged': tagged,
+                    'matches': matches,
+                    'videos': videos
+                    }
+
+        return {'info': 'personId {} not found'.format(personId)}
+
+    else:
+        # grab x number of non-tagged items
+        if lastKeyTS is not None and lastKeyId is not None:
+            lastKeyTS = int(lastKeyTS)
+            #lastKey = {'ts': boto3.dynamodb.types.Decimal(lastKeyTS)}
+            resp = table.scan(ProjectionExpression='personId, videos, ts, known',
+                              FilterExpression=Key('tagged').eq(False),
+                              Limit=limit,
+                              ExclusiveStartKey={'ts':lastKeyTS, 'personId': lastKeyId},
+                              ScanIndexForward=True)
+        else:
+            resp = table.scan(ProjectionExpression='personId, videos, ts, known',
+                              FilterExpression=Key('tagged').eq(False),
+                              Limit=limit,
+                              ScanIndexForward=True)
+
+        items = []
+        if resp['Count'] > 0:
+            for i in resp['Items']:
+                j = {'personId': str(i['personId']),
+                     'ts': int(i['ts']),
+                     'videos': i['videos'],
+                     'known' : bool(i['known'])
+                     }
+                items.append(j)
+
+        if 'LastEvaluatedKey' in resp:
+            j = {'lastKey': {'personId': str(resp['LastEvaluatedKey']['personId']),
+                             'ts': int(resp['LastEvaluatedKey']['ts'])},
+                 'items': items}
+        else:
+            j = {'items': items}
+
+        return j
+
 
