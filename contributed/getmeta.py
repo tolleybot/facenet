@@ -5,11 +5,11 @@ from boto3.dynamodb.conditions import Key
 
 sys.path.append('.')
 
-with open('./config.json') as f:
+with open('./data/config.json') as f:
     cfg = json.load(f)
 
 
-def getmeta(personId,limit=1000,lastKeyId=None,lastKeyTS=None):
+def getmeta(personId,limit=1000,showTagged=True,lastKeyTS=0):
     """
     Gets all meta data associated with a personId
     :param personId:
@@ -21,11 +21,22 @@ def getmeta(personId,limit=1000,lastKeyId=None,lastKeyTS=None):
     if limit is None:
         limit = 500
 
+    if lastKeyTS is None:
+        lastKeyTS = 0
+
+    if showTagged is None:
+        showTagged = True
+
     limit = int(limit)
+    lastKeyTS = int(lastKeyTS)
+    showTagged = bool(int(showTagged))
 
     if personId:
 
-        resp = table.query(KeyConditionExpression=Key('personId', ).eq(personId))
+        resp = table.query(ProjectionExpression='cameraId,ts,personId,videos,matches',
+                           IndexName='personId-index',
+                           KeyConditionExpression=Key('personId').eq(personId)
+                           )
 
         if resp['Count'] > 0:
             item = resp['Items'][0]
@@ -54,55 +65,78 @@ def getmeta(personId,limit=1000,lastKeyId=None,lastKeyTS=None):
 
             ts = int(item['ts'])
 
-            videos = []
-            if 'videos' in item:
-                for v in item['videos']:
-                    videos.append(str(v['image']))
-
-            return {'personId': personId,
+            return [{'cameraId' : item['cameraId'],
+                    'personId': personId,
                     'ts': ts,
-                    'faces': faces,
-                    'known': known,
-                    'tagged': tagged,
-                    'matches': matches,
-                    'videos': videos
-                    }
+                     'matches':matches,
+                    'videos': item['videos']
+                    }]
 
         return {'info': 'personId {} not found'.format(personId)}
 
     else:
-        # grab x number of non-tagged items
-        if lastKeyTS is not None and lastKeyId is not None:
-            lastKeyTS = int(lastKeyTS)
-            #lastKey = {'ts': boto3.dynamodb.types.Decimal(lastKeyTS)}
-            resp = table.scan(ProjectionExpression='personId, videos, ts, known',
-                              FilterExpression=Key('tagged').eq(False),
-                              Limit=limit,
-                              ExclusiveStartKey={'ts':lastKeyTS, 'personId': lastKeyId},
-                              ScanIndexForward=True)
-        else:
-            resp = table.scan(ProjectionExpression='personId, videos, ts, known',
-                              FilterExpression=Key('tagged').eq(False),
-                              Limit=limit,
-                              ScanIndexForward=True)
 
         items = []
-        if resp['Count'] > 0:
-            for i in resp['Items']:
-                j = {'personId': str(i['personId']),
-                     'ts': int(i['ts']),
-                     'videos': i['videos'],
-                     'known' : bool(i['known'])
-                     }
-                items.append(j)
+        continue_scan = True
+        last_evaluated_key = None
 
-        if 'LastEvaluatedKey' in resp:
-            j = {'lastKey': {'personId': str(resp['LastEvaluatedKey']['personId']),
-                             'ts': int(resp['LastEvaluatedKey']['ts'])},
-                 'items': items}
-        else:
-            j = {'items': items}
+        while continue_scan:
 
-        return j
+            if last_evaluated_key:
+                # grab x number of non-tagged items
+                if showTagged:
+
+                    resp = table.query(ProjectionExpression='cameraId,ts,personId,videos,known,tagged',
+                                       KeyConditionExpression=Key('cameraId').eq('1') & Key('ts').lt(lastKeyTS),
+                                       Limit=limit,
+                                       ScanIndexForward=False,
+                                       ExclusiveStartKey=last_evaluated_key
+                                       )
+                else:
+                    resp = table.query(ProjectionExpression='cameraId,ts,personId,videos,known,tagged',
+                                       KeyConditionExpression=Key('cameraId').eq('1') & Key('ts').lt(lastKeyTS),
+                                       FilterExpression=Key('tagged').eq(False),
+                                       Limit=limit,
+                                       ScanIndexForward=False,
+                                       ExclusiveStartKey=last_evaluated_key
+                                       )
+            else:
+                if showTagged:
+
+                    resp = table.query(ProjectionExpression='cameraId,ts,personId,videos,known,tagged',
+                                       KeyConditionExpression=Key('cameraId').eq('1') & Key('ts').lt(lastKeyTS),
+                                       Limit=limit,
+                                       ScanIndexForward=False
+                                       )
+                else:
+                    resp = table.query(ProjectionExpression='cameraId,ts,personId,videos,known,tagged',
+                                       KeyConditionExpression=Key('cameraId').eq('1') & Key('ts').lt(lastKeyTS),
+                                       FilterExpression=Key('tagged').eq(False),
+                                       Limit=limit,
+                                       ScanIndexForward=False
+                                       )
+            if 'LastEvaluatedKey' in resp:
+                continue_scan = True
+            else:
+                continue_scan = False
+
+            if continue_scan:
+                last_evaluated_key = resp['LastEvaluatedKey']
+
+            if 'Count' not in resp:
+                return {'error': 'table query failed'}
+
+            if resp['Count'] > 0:
+                for i in resp['Items']:
+                    j = {'cameraId' : i['cameraId'],
+                         'personId': str(i['personId']),
+                         'ts': int(i['ts']),
+                         'videos': i['videos'],
+                         'known' : bool(i['known']),
+                         'tagged': bool(i['tagged'])
+                         }
+                    items.append(j)
+
+    return items
 
 

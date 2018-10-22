@@ -11,7 +11,7 @@ from untagitems import untag
 
 sys.path.append('.')
 
-with open('./config.json') as f:
+with open('./data/config.json') as f:
     cfg = json.load(f)
 
 app = Flask(__name__)
@@ -20,6 +20,7 @@ app.config['CORS_HEADERS'] = 'Content-Type'
 
 
 @app.route("/ping", methods=['GET'])
+@cross_origin()
 def ping():
     """Determine if the container is working and healthy. In this sample container, we declare
     it healthy if we can load the model successfully."""
@@ -27,6 +28,7 @@ def ping():
 
 
 @app.route("/match", methods=['GET'])
+@cross_origin()
 def match():
     """ match faces for a specific entry.  pass in personId
     """
@@ -38,7 +40,9 @@ def match():
 
     return jsonify({'error': 'personid param not found in request'})
 
+
 @app.route("/unmatch", methods=['GET'])
+@cross_origin()
 def unmatch():
     """ remove tagged items aka unmatch for a specific personId
     """
@@ -59,12 +63,10 @@ def requestmeta():
     personid = request.args.get('personid')
     limit = request.args.get('limit')
     lastKeyTS = request.args.get('lastKeyTS')
-    lastKeyId = request.args.get('lastKeyId')
+    showTagged = request.args.get('showTagged')
 
-
-    j = getmeta(personid,limit, lastKeyId,lastKeyTS)
+    j = getmeta(personid, limit, showTagged, lastKeyTS)
     return jsonify(j)
-
 
 
 print("Starting Face Recognition Server")

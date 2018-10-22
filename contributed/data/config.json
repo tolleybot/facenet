@@ -1,11 +1,12 @@
 {
   "face_crop_size" : 160,
+  "face_min_size" : 64,
   "face_crop_margin" : 32,
-  "face_min_area" : 4096,
+  "max_matches" : 100,
   "thumbnail_sqs_name" : "thumbnail-videos",
   "facenet_modelpath" : "/facenet/20180402-114759.pb",
-  "person_recognition_table" : "labweek_face_rec",
+  "person_recognition_table" : "labweek_facerec",
   "input_queue_polling_delay" : 1,
-  "cluster_face_distance" : 1,
+  "cluster_face_distance" : 1.0,
   "port" : 8080
 }

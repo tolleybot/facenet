@@ -8,14 +8,12 @@ import uuid
 import boto3
 import botocore
 import io
+import getopt
+import urllib
 
 sys.path.append('.')
 
-with open('./config.json') as f:
-    cfg = json.load(f)
 
-detector = face.Detection(face_crop_size=cfg['face_crop_size'], face_crop_margin=cfg['face_crop_margin'])
-encoder = face.Encoder(facenet_model=cfg['facenet_modelpath'])
 
 
 def get_object_url(s3_bucket_name, key_name):
@@ -35,9 +33,19 @@ def get_object_url(s3_bucket_name, key_name):
     return url
 
 
-def runSQSPoller():
+def runSQSPoller(config_file):
     """ Polls our SQS to see if there are any new messages
     to act on"""
+
+    try:
+        with open(config_file) as f:
+            cfg = json.load(f)
+    except EnvironmentError:
+        print("config file {} could not be opened".format(config_file))
+        return
+
+    detector = face.Detection(face_crop_size=cfg['face_crop_size'], face_crop_margin=cfg['face_crop_margin'], face_min_size=cfg['face_min_size'])
+    encoder = face.Encoder(facenet_model=cfg['facenet_modelpath'])
 
     sqs = boto3.resource('sqs', region_name='us-east-1')
     s3 = boto3.resource('s3', region_name='us-east-1')
@@ -59,6 +67,7 @@ def runSQSPoller():
                 s3data = record['s3']
                 bucket_name = s3data['bucket']['name']
                 image_name = s3data['object']['key']
+                image_name = urllib.parse.unquote(image_name)
 
                 try:
                     obj = s3.Object(bucket_name, image_name)
@@ -74,43 +83,59 @@ def runSQSPoller():
                     continue
 
                 faces = detector.find_faces(image)
-                minarea = cfg['face_min_area']
                 updated_faces = []
                 if len(faces) > 0:
                     # get largest face
                     for fc in faces:
-                        tx = fc.bounding_box[0]
-                        ty = fc.bounding_box[1]
-                        bx = fc.bounding_box[2]
-                        by = fc.bounding_box[3]
-                        area = (bx - tx) * (by - ty)
-                        if area > minarea:
-                            emb = encoder.generate_embedding(fc)
-                            updated_faces += [{'bbox': fc.bounding_box.tolist(), 'embedding': emb.tostring()}]
-
-                    if len(updated_faces) == 0:
-                        print("Only small faces found < {}.  Faces will not be added".format(cfg['face_min_area']))
-                        message.delete()
-                        continue
+                        emb = encoder.generate_embedding(fc)
+                        updated_faces += [{'bbox': fc.bounding_box.tolist(), 'embedding': emb.tostring()}]
 
                     print("Adding Face")
                     rec_table = db.Table(cfg['person_recognition_table'])
 
                     rec_table.put_item(
                         Item={
-                            'known': False, # Indicates this entry was clustered with a tagged entry
-                            'tagged': False, # Indicates this entry was picked by the user
+                            'cameraId': '1',
+                            'known': False,  # Indicates this entry was clustered with a tagged entry
+                            'tagged': False,  # Indicates this entry was picked by the user
                             'personId': str(uuid.uuid1()),
                             'ts': int(time.time()),
                             'videos': [{'image': obj_url, 'imageId': str(uuid.uuid1())}],
                             'faces': updated_faces
                         }
                     )
-                else:
-                    message.delete()
+
+
+            message.delete()
 
         time.sleep(cfg['input_queue_polling_delay'])
 
 
+def help():
+    print('enrollment.py -c <config file>')
+
+
+def main(argv):
+    """ main functions """
+
+    config_file = './data/config.json'
+
+
+    try:
+        opts, args = getopt.getopt(argv, "hc:",
+                                   ["help=", "config="])
+    except getopt.GetoptError:
+        help()
+        sys.exit(2)
+    for opt, arg in opts:
+        if opt == '-h':
+            help()
+            sys.exit()
+        elif opt in ("-c", "--config"):
+            config_file = arg
+
+    runSQSPoller(config_file)
+
+
 if __name__ == "__main__":
-    runSQSPoller()
+    main(sys.argv[1:])

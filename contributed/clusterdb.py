@@ -9,7 +9,7 @@ import io
 
 sys.path.append('.')
 
-with open('./config.json') as f:
+with open('./data/config.json') as f:
     cfg = json.load(f)
 
 
@@ -27,43 +27,66 @@ def runTagging(personId):
 
     table = db.Table(cfg['person_recognition_table'])
 
-    resp = table.query(KeyConditionExpression=Key('personId', ).eq(personId))
+    resp = table.query(ProjectionExpression='cameraId,ts,faces,personId',
+                       IndexName='personId-index',
+                       KeyConditionExpression=Key('personId').eq(personId))
 
     if resp['Count'] > 0:
         item = resp['Items'][0]
         faces = item['faces']
+        cameraId = item['cameraId']
         timestamp = int(item['ts'])
 
         # convert embeddings back to numpy arrays
         for f in faces:
             f['embedding'] = np.fromstring(f['embedding'].value, dtype=np.float32)
 
-        # iterate over entire database for a specific time period
+        continue_scan = True
 
-        scan = table.scan(ProjectionExpression='personId, faces, ts')
-
+        cameraIds = []
         personIds = []
         timestamps = []
-        if scan['Count'] > 0:
-            for i in scan['Items']:
+        last_evaluated_key = None
 
-                if i['personId'] == item['personId']:
-                    continue
+        while continue_scan:
 
-                if 'faces' in i:
-                    for f2 in i['faces']:
-                        for f3 in faces:
-                            emb = np.fromstring(f2['embedding'].value, dtype=np.float32)
-                            d = distance(emb, f3['embedding'])
-                            if d <= thresh:
-                                personIds.append(i['personId'])
-                                timestamps.append(i['ts'])
-                                break
+            # iterate over entire database (TODO: Don may want to change how this works
+            if last_evaluated_key:
+                scan = table.scan(ProjectionExpression='cameraId, faces, ts, personId',
+                                  ExclusiveStartKey=last_evaluated_key)
+            else:
+                scan = table.scan(ProjectionExpression='cameraId, faces, ts, personId')
 
-        if len(personIds) > 0:
+            if scan['Count'] > 0:
+                for i in scan['Items']:
+
+                    if i['personId'] == item['personId']:
+                        continue
+
+                    if 'faces' in i:
+                        for f2 in i['faces']:
+                            for f3 in faces:
+                                emb = np.fromstring(f2['embedding'].value, dtype=np.float32)
+                                d = distance(emb, f3['embedding'])
+                                if d <= thresh:
+                                    cameraIds.append(i['cameraId'])
+                                    personIds.append(i['personId'])
+                                    timestamps.append(i['ts'])
+                                    break
+
+
+            if 'LastEvaluatedKey' in scan and cfg['max_matches'] < len(cameraIds):
+                continue_scan = True
+            else:
+                continue_scan = False
+
+            if continue_scan:
+                last_evaluated_key = scan['LastEvaluatedKey']
+
+        if len(cameraIds) > 0:
             update_resp = table.update_item(
                 Key={
-                    'personId': personId,
+                    'cameraId': cameraId,
                     'ts': timestamp
                 },
                 UpdateExpression="set known= :t, matches= :c, tagged= :g",
@@ -78,10 +101,10 @@ def runTagging(personId):
                 return {
                     'error': "A response code of {} returned from updating table".format(update_resp['HTTPStatusCode'])}
 
-            for p, t in zip(personIds, timestamps):
+            for p, t in zip(cameraIds, timestamps):
                 update_resp = table.update_item(
                     Key={
-                        'personId': p,
+                        'cameraId': p,
                         'ts': t
                     },
                     UpdateExpression="set known= :t, tagged= :c",
@@ -94,7 +117,7 @@ def runTagging(personId):
                 if update_resp['ResponseMetadata']['HTTPStatusCode'] != 200:
                     return {'error': "A response code of {} returned from updating tagged item in table".format(
                         update_resp['HTTPStatusCode'])}
-            print('finished')
+
 
     return {'status': True}
 

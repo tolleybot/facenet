@@ -8,7 +8,7 @@ import io
 
 sys.path.append('.')
 
-with open('./config.json') as f:
+with open('./data/config.json') as f:
     cfg = json.load(f)
 
 
@@ -21,7 +21,10 @@ def untag(personId):
 
     table = db.Table(cfg['person_recognition_table'])
 
-    resp = table.query(KeyConditionExpression=Key('personId', ).eq(personId))
+    resp = table.query(ProjectionExpression='cameraId,ts,matches',
+                       IndexName='personId-index',
+                       KeyConditionExpression=Key('personId').eq(personId))
+
 
     if resp['Count'] > 0:
         item = resp['Items'][0]
@@ -32,7 +35,9 @@ def untag(personId):
 
             for m in matches:
 
-                resp_match = table.query(KeyConditionExpression=Key('personId', ).eq(m))
+                resp_match = table.query(ProjectionExpression='cameraId,ts',
+                                        IndexName='personId-index',
+                                        KeyConditionExpression=Key('personId').eq(m))
 
                 if resp_match['ResponseMetadata']['HTTPStatusCode'] != 200:
                     return {'error' :
@@ -42,7 +47,7 @@ def untag(personId):
 
                 update_resp = table.update_item(
                     Key={
-                        'personId': mitem['personId'],
+                        'cameraId': mitem['cameraId'],
                         'ts': mitem['ts']
                     },
                     UpdateExpression="set known= :t, tagged= :c",
@@ -59,7 +64,7 @@ def untag(personId):
         # update known table to remove match list
         update_resp = table.update_item(
             Key={
-                'personId': item['personId'],
+                'cameraId': item['cameraId'],
                 'ts': item['ts']
             },
             UpdateExpression="set known= :t, tagged= :c, matches= :m",
