@@ -140,7 +140,8 @@ class Detection:
 
     def find_faces(self, image):
         faces = []
-
+        # TODO: Don, the following function also returns face points, which we may want to use to tell if someone
+        # is looking at the camera
         bounding_boxes, _ = align.detect_face.detect_face(image, self.minsize,
                                                           self.pnet, self.rnet, self.onet,
                                                           self.threshold, self.factor)
